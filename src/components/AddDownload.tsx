@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -6,13 +5,19 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { Download, Download as DownloadIcon, FileDown, Link, Magnet } from 'lucide-react';
+import { initiateDownload } from '@/utils/downloadApi';
 
 const AddDownload = ({ onAddDownload }: { onAddDownload: (download: any) => void }) => {
   const [url, setUrl] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentTab, setCurrentTab] = useState('url');
   
-  const handleSubmit = (e: React.FormEvent) => {
+  const [includeThumbnail, setIncludeThumbnail] = useState(true);
+  const [includeSubtitles, setIncludeSubtitles] = useState(true);
+  const [audioOnly, setAudioOnly] = useState(false);
+  const [includeMetadata, setIncludeMetadata] = useState(true);
+  
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!url.trim()) {
@@ -22,35 +27,56 @@ const AddDownload = ({ onAddDownload }: { onAddDownload: (download: any) => void
     
     setIsAnalyzing(true);
     
-    // Simulate URL analysis
-    setTimeout(() => {
-      setIsAnalyzing(false);
+    // Determine download type based on URL
+    const downloadType = url.includes('magnet:') ? 'torrent' : 
+                        url.includes('youtube.com') || url.includes('youtu.be') ? 'youtube' :
+                        url.includes('instagram') ? 'instagram' :
+                        url.includes('twitter') || url.includes('x.com') ? 'twitter' :
+                        url.includes('tiktok') ? 'tiktok' : 'general';
+    
+    try {
+      // Call API to initiate download
+      const options = currentTab === 'ytdlp' ? {
+        audioOnly,
+        includeSubtitles,
+        includeThumbnail,
+        includeMetadata,
+      } : undefined;
       
-      // Create a mock download object based on URL type
-      const downloadType = url.includes('magnet:') ? 'torrent' : 
-                           url.includes('youtube.com') || url.includes('youtu.be') ? 'youtube' :
-                           url.includes('instagram') ? 'instagram' :
-                           url.includes('twitter') || url.includes('x.com') ? 'twitter' :
-                           url.includes('tiktok') ? 'tiktok' : 'general';
-      
-      const mockDownload = {
-        id: `download-${Date.now()}`,
+      const result = await initiateDownload({
         url,
-        type: downloadType,
-        filename: `file-${Date.now()}.${downloadType === 'youtube' ? 'mp4' : 
-                                      downloadType === 'torrent' ? 'torrent' : 'bin'}`,
-        size: Math.floor(Math.random() * 1024) + 'MB',
-        status: 'queued',
-        progress: 0,
-        speed: '0 KB/s',
-        chunks: Array(4).fill(0).map(() => Math.random() * 100),
-        createdAt: new Date().toISOString(),
-      };
+        type: downloadType as any,
+        options
+      });
       
-      onAddDownload(mockDownload);
-      setUrl('');
-      toast.success('Download added to queue');
-    }, 1500);
+      if (result.success) {
+        // Create a mock download object based on API response
+        const mockDownload = {
+          id: result.downloadId || `download-${Date.now()}`,
+          url,
+          type: downloadType,
+          filename: result.filename || `file-${Date.now()}.${downloadType === 'youtube' ? 'mp4' : 
+                                        downloadType === 'torrent' ? 'torrent' : 'bin'}`,
+          size: result.size || Math.floor(Math.random() * 1024) + 'MB',
+          status: 'queued',
+          progress: 0,
+          speed: '0 KB/s',
+          chunks: Array(4).fill(0).map(() => Math.random() * 100),
+          createdAt: new Date().toISOString(),
+        };
+        
+        onAddDownload(mockDownload);
+        setUrl('');
+        toast.success('Download added to queue');
+      } else {
+        toast.error(result.message || 'Failed to start download');
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      toast.error('Failed to start download');
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   return (
@@ -177,25 +203,45 @@ const AddDownload = ({ onAddDownload }: { onAddDownload: (download: any) => void
                 </div>
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <div className="flex items-center space-x-2">
-                    <input type="checkbox" id="include-thumbnail" defaultChecked />
+                    <input 
+                      type="checkbox" 
+                      id="include-thumbnail" 
+                      checked={includeThumbnail}
+                      onChange={(e) => setIncludeThumbnail(e.target.checked)}
+                    />
                     <label htmlFor="include-thumbnail" className="text-sm">
                       Download thumbnail
                     </label>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <input type="checkbox" id="include-subtitles" defaultChecked />
+                    <input 
+                      type="checkbox" 
+                      id="include-subtitles" 
+                      checked={includeSubtitles}
+                      onChange={(e) => setIncludeSubtitles(e.target.checked)}
+                    />
                     <label htmlFor="include-subtitles" className="text-sm">
                       Download subtitles
                     </label>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <input type="checkbox" id="audio-only" />
+                    <input 
+                      type="checkbox" 
+                      id="audio-only" 
+                      checked={audioOnly}
+                      onChange={(e) => setAudioOnly(e.target.checked)}
+                    />
                     <label htmlFor="audio-only" className="text-sm">
                       Audio only
                     </label>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <input type="checkbox" id="include-metadata" defaultChecked />
+                    <input 
+                      type="checkbox" 
+                      id="include-metadata" 
+                      checked={includeMetadata}
+                      onChange={(e) => setIncludeMetadata(e.target.checked)}
+                    />
                     <label htmlFor="include-metadata" className="text-sm">
                       Include metadata
                     </label>

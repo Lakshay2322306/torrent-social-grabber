@@ -1,10 +1,10 @@
-
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Pause, Play, Trash2, FileDown, Info } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { checkDownloadStatus } from '@/utils/downloadApi';
 
 interface DownloadItemProps {
   download: {
@@ -62,40 +62,97 @@ const DownloadItem: React.FC<DownloadItemProps> = ({ download, onRemove }) => {
   const [speed, setSpeed] = useState(download.speed);
   const [chunks, setChunks] = useState(download.chunks);
   
-  // Simulate download progress
+  // Check download status from API
   useEffect(() => {
-    if (status === 'downloading') {
-      const interval = setInterval(() => {
-        setProgress((prevProgress) => {
-          const newProgress = prevProgress + Math.random() * 5;
-          if (newProgress >= 100) {
-            clearInterval(interval);
-            setStatus('completed');
-            setSpeed('0 KB/s');
-            return 100;
+    if (status === 'downloading' || status === 'queued') {
+      const statusCheck = setInterval(async () => {
+        try {
+          // Only check status if we have a valid ID from the API
+          if (download.id && download.id.startsWith('download-') === false) {
+            const result = await checkDownloadStatus(download.id);
+            
+            if (result.success) {
+              if (result.status === 'completed') {
+                clearInterval(statusCheck);
+                setStatus('completed');
+                setProgress(100);
+                setSpeed('0 KB/s');
+              } else if (result.status === 'error') {
+                clearInterval(statusCheck);
+                setStatus('error');
+              } else {
+                setStatus(result.status);
+                if (result.progress) setProgress(result.progress);
+                if (result.speed) setSpeed(result.speed);
+                
+                // Update chunks if available
+                if (result.chunks) {
+                  setChunks(result.chunks);
+                } else {
+                  // Otherwise simulate chunk progress based on overall progress
+                  setChunks(chunks.map(() => {
+                    const randomVariation = Math.random() * 10 - 5; // +/- 5%
+                    const chunkProgress = Math.max(0, Math.min(100, result.progress + randomVariation));
+                    return chunkProgress;
+                  }));
+                }
+              }
+            }
+          } else {
+            // For mock downloads (without real API IDs), use the simulation logic
+            simulateProgress();
           }
-          
-          // Update chunks
-          setChunks((prevChunks) => 
-            prevChunks.map(chunk => {
-              const newChunk = chunk + Math.random() * 5;
-              return newChunk > 100 ? 100 : newChunk;
-            })
-          );
-          
-          // Update speed
-          setSpeed(`${Math.floor(Math.random() * 1024) + 100} KB/s`);
-          
-          return newProgress;
-        });
-      }, 500);
+        } catch (error) {
+          console.error('Error checking download status:', error);
+        }
+      }, 1000);
       
-      return () => clearInterval(interval);
+      return () => clearInterval(statusCheck);
     }
-  }, [status]);
+  }, [download.id, status]);
+  
+  // Simulate download progress for mock downloads
+  const simulateProgress = () => {
+    setProgress((prevProgress) => {
+      const newProgress = prevProgress + Math.random() * 5;
+      if (newProgress >= 100) {
+        setStatus('completed');
+        setSpeed('0 KB/s');
+        return 100;
+      }
+      
+      // Update chunks
+      setChunks((prevChunks) => 
+        prevChunks.map(chunk => {
+          const newChunk = chunk + Math.random() * 5;
+          return newChunk > 100 ? 100 : newChunk;
+        })
+      );
+      
+      // Update speed
+      setSpeed(`${Math.floor(Math.random() * 1024) + 100} KB/s`);
+      
+      return newProgress;
+    });
+  };
 
-  const togglePause = () => {
-    setStatus(status === 'downloading' ? 'paused' : 'downloading');
+  const togglePause = async () => {
+    // If this is a real API download with ID, send pause/resume request
+    if (download.id && download.id.startsWith('download-') === false) {
+      try {
+        const action = status === 'downloading' ? 'pause' : 'resume';
+        const response = await fetch(`https://e67cfd0f-325c-4245-85db-ecda0449d4ac-00-2iqqtm6mqb6m8.pike.replit.dev/download/${action}/${download.id}`);
+        
+        if (response.ok) {
+          setStatus(status === 'downloading' ? 'paused' : 'downloading');
+        }
+      } catch (error) {
+        console.error(`Error ${status === 'downloading' ? 'pausing' : 'resuming'} download:`, error);
+      }
+    } else {
+      // For mock downloads
+      setStatus(status === 'downloading' ? 'paused' : 'downloading');
+    }
   };
 
   return (
