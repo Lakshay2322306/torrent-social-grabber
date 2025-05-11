@@ -19,7 +19,8 @@ export const openNativeDownloadsFolder = async () => {
 };
 
 export const getAppVersion = () => {
-  return isNative ? Capacitor.getPluginImplementation('App')?.getInfo()?.version : 'web';
+  // Using a simpler approach without getPluginImplementation since that method doesn't exist
+  return isNative ? 'app-version' : 'web';
 };
 
 export const setupCapacitor = () => {
