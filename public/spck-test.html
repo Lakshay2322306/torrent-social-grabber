@@ -1,0 +1,152 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Download API Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      padding: 20px;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    input, button {
+      padding: 10px;
+      font-size: 16px;
+    }
+    button {
+      background: #4a90e2;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #result {
+      margin-top: 20px;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background-color: #f9f9f9;
+      min-height: 100px;
+    }
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255,255,255,.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 1s ease-in-out infinite;
+      margin-right: 10px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <h1>Download API Test</h1>
+  <div class="container">
+    <input type="text" id="urlInput" placeholder="Enter URL to download" value="https://www.youtube.com/watch?v=dQw4w9WgXcQ">
+    
+    <div>
+      <label>
+        <input type="radio" name="downloadType" value="youtube" checked> YouTube
+      </label>
+      <label>
+        <input type="radio" name="downloadType" value="general"> General
+      </label>
+      <label>
+        <input type="radio" name="downloadType" value="torrent"> Torrent
+      </label>
+    </div>
+    
+    <div>
+      <label>
+        <input type="checkbox" id="audioOnly"> Audio Only
+      </label>
+    </div>
+    
+    <button id="downloadBtn">Start Download</button>
+  </div>
+  
+  <div id="result">Results will appear here...</div>
+
+  <script>
+    document.getElementById('downloadBtn').addEventListener('click', async function() {
+      const url = document.getElementById('urlInput').value;
+      const downloadType = document.querySelector('input[name="downloadType"]:checked').value;
+      const audioOnly = document.getElementById('audioOnly').checked;
+      const resultDiv = document.getElementById('result');
+      
+      if (!url) {
+        resultDiv.innerHTML = 'Please enter a URL';
+        return;
+      }
+      
+      // Show loading state
+      this.innerHTML = '<span class="spinner"></span>Processing...';
+      this.disabled = true;
+      resultDiv.innerHTML = 'Contacting API...';
+      
+      try {
+        // Call the download API
+        const response = await fetch('https://e67cfd0f-325c-4245-85db-ecda0449d4ac-00-2iqqtm6mqb6m8.pike.replit.dev/download', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url,
+            type: downloadType,
+            options: {
+              audioOnly
+            }
+          })
+        });
+        
+        const data = await response.json();
+        
+        // Display the result
+        resultDiv.innerHTML = '<h3>API Response:</h3><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+        
+        // If successful and has downloadId, poll for status
+        if (data.success && data.downloadId) {
+          checkDownloadStatus(data.downloadId, resultDiv);
+        }
+      } catch (error) {
+        resultDiv.innerHTML = 'Error: ' + error.message;
+      } finally {
+        // Reset button
+        this.innerHTML = 'Start Download';
+        this.disabled = false;
+      }
+    });
+    
+    async function checkDownloadStatus(downloadId, resultDiv) {
+      try {
+        const statusResponse = await fetch(`https://e67cfd0f-325c-4245-85db-ecda0449d4ac-00-2iqqtm6mqb6m8.pike.replit.dev/download/status/${downloadId}`);
+        const statusData = await statusResponse.json();
+        
+        const currentContent = resultDiv.innerHTML;
+        resultDiv.innerHTML = currentContent + '<h3>Status Update:</h3><pre>' + JSON.stringify(statusData, null, 2) + '</pre>';
+        
+        // If not completed, check again in 3 seconds
+        if (statusData.status !== 'completed' && statusData.status !== 'error') {
+          resultDiv.innerHTML += '<p>Checking again in 3 seconds...</p>';
+          setTimeout(() => checkDownloadStatus(downloadId, resultDiv), 3000);
+        }
+      } catch (error) {
+        resultDiv.innerHTML += '<p>Error checking status: ' + error.message + '</p>';
+      }
+    }
+  </script>
+</body>
+</html>
